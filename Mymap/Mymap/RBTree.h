@@ -1,6 +1,6 @@
 #pragma once
 #include<iostream>
-#include<assert.h>
+#include"RIterator.h"
 
 using namespace std;
 
@@ -10,30 +10,124 @@ enum Colour		//红黑树颜色枚举
 	BLACK,
 };
 
-template<class K, class V>
+template<class T>				//pair类型的T
 struct RBTreeNode					//节点结构体
 {
-	RBTreeNode<K, V>* _left;		//左子树
-	RBTreeNode<K, V>* _right;		//右子树
-	RBTreeNode<K, V>* _parent;		//父节点
+	RBTreeNode<T>* _left;		//左子树
+	RBTreeNode<T>* _right;		//右子树
+	RBTreeNode<T>* _parent;		//父节点
 
-	pair<K, V> _kv;
+	T _data;
 
 	Colour _col;
 
-	RBTreeNode(const pair<K, V>& kv)	//构造函数
+	RBTreeNode(const T& x)	//构造函数
 		: _left(nullptr)
 		, _right(nullptr)
 		, _parent(nullptr)
-		, _kv(kv)
+		, _data(x)
 		, _col(RED)
 	{}
 };
 
-template<class K, class V>
+template<class T, class Ref, class Ptr>
+struct __TreeIterator
+{
+	typedef Ref reference;
+	typedef Ptr pointer;
+
+	typedef RBTreeNode<T> Node;
+	typedef __TreeIterator<T, Ref, Ptr> Self; 
+
+	Node* _node;
+
+	__TreeIterator(Node* node)
+		:_node(node)
+	{}
+
+	Ref operator*()		//*返回引用
+	{
+		return _node->_data;
+	}
+
+	Ptr operator->()		//->返回指针 可以直接用
+	{
+		return &_node->_data;
+	}
+
+	bool operator != (const Self& s) const
+	{
+		return _node != s._node;
+	}
+
+	bool operator == (const Self& s) const
+	{
+		return _node == s._node;
+	}
+
+	Self operator++()
+	{
+		if (_node->_right)
+		{
+			Node* left = _node->_right;
+			while (left->_left)
+			{
+				left = left->_left;
+			}
+
+			_node = left;
+		}
+		else
+		{
+			Node* cur = _node;
+			Node* parent = _node->_parent;
+			
+			while (parent&& cur == parent->_right)
+			{
+				cur = cur->_parent;
+				parent = parent->_parent;
+			}
+
+			_node = parent;
+		}
+
+		return *this;
+	}
+
+	Self operator--()
+	{
+		if (_node->_left)
+		{
+			Node* right = _node->_left;
+			while (right->_left)
+			{
+				right = right->_left;
+			}
+
+			_node = right;
+		}
+		else
+		{
+			Node* cur = _node;
+			Node* parent = _node->_parent;
+
+			while (parent && cur == parent->_left)
+			{
+				cur = cur->_parent;
+				parent = parent->_parent;
+			}
+
+			_node = parent;
+		}
+
+		return *this;
+	}
+};
+
+template<class K, class T, class KeyOfT>		//通过仿函数来取key的值进行比较
 class RBTree
 {
-	typedef RBTreeNode<K, V> Node;
+	typedef RBTreeNode<T> Node;
 private:
 	Node* _root;
 
@@ -148,6 +242,10 @@ private:
 	}
 
 public:
+	typedef __TreeIterator < T, T&, T* > iterator;
+	typedef __TreeIterator < T, const T&, const T* > const_iterator;
+	typedef ReverseIterator<iterator> reverse_iterator;
+
 	RBTree()
 		:_root(nullptr)
 	{}
@@ -158,16 +256,49 @@ public:
 		_root = nullptr;
 	}
 
+	reverse_iterator rbegin()
+	{
+		Node* right= _root;
+		while (right && right->_right)			//最左
+		{
+			right = right->_right;
+		}
+
+		return reverse_iterator(right);
+	}
+
+	reverse_iterator rend()
+	{
+		return reverse_iterator(nullptr);
+	}
+
+	iterator begin()
+	{
+		Node* left = _root;
+		while (left && left->_left)			//最左
+		{
+			left = left->_left;
+		}
+
+		return iterator(left);
+	}
+
+	iterator end()
+	{
+		return iterator(nullptr);
+	}
+
 	Node* Find(const K& key)
 	{
+		KeyOfT kot;				//
 		Node* cur = _root;
 		while (cur)
 		{
-			if (cur->_kv.first > key)
+			if (kot(cur->_data) > key)
 			{
 				cur = cur->_left;
 			}
-			else if (cur->_kv < key)
+			else if (kot(cur->_data) < key)
 			{
 				cur = cur->_right;
 			}
@@ -180,38 +311,40 @@ public:
 		return nullptr;
 	}
 
-	pair<Node*, bool> Insert(const pair<K, V>& kv)
+	pair<iterator, bool> Insert(const T& data)
 	{
 		if (_root == nullptr)
 		{
-			_root = new Node(kv);
+			_root = new Node(data);
 			_root->_col = BLACK;
-			return make_pair(_root, true);
+			return make_pair(iterator(_root), true);
 		}
+
+		KeyOfT kot;
 
 		Node* parent = nullptr;
 		Node* cur = _root;
 		while (cur)
 		{
-			if (cur->_kv.first > kv.first)
+			if (kot(cur->_data) > kot(data))
 			{
 				parent = cur;
 				cur = cur->_left;
 			}
-			else if (cur->_kv.first < kv.first)
+			else if (kot(cur->_data) < kot(data))
 			{
 				parent = cur;
 				cur = cur->_right;
 			}
 			else
 			{
-				return make_pair(cur, false);
+				return make_pair(iterator(cur), false);
 			}
 		}
 
-		Node* newNode = new Node(kv);
+		Node* newNode = new Node(data);
 		newNode->_col = RED;
-		if (parent->_kv.first > kv.first)
+		if (kot(parent->_data) > kot(data))
 		{
 			parent->_left = newNode;
 			newNode->_parent = parent;
@@ -298,7 +431,7 @@ public:
 
 		_root->_col = BLACK;		//插入结束再次将根变为黑
 
-		return make_pair(newNode, true);
+		return make_pair(iterator(newNode), true);
 	}
 
 	bool CheckBlance()			//检查是否为红黑树，每个路径的黑色节点数相等，
